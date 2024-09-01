@@ -160,12 +160,12 @@ void setup() {
   arm_rfft_fast_init_f32(&S, SAMPLE_SIZE);
 
   // PWM 40kHz
-  Serial.println("setup /dev/pwm0");
-  fd = open("/dev/pwm0", O_RDONLY);
-  info.frequency = 50000; // 40kHz
-  info.duty      = 0x7fff;
-  ioctl(fd, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&info));
-  ioctl(fd, PWMIOC_START, 0);  
+  // Serial.println("setup /dev/pwm0");
+  // fd = open("/dev/pwm0", O_RDONLY);
+  // info.frequency = 50000; // 40kHz
+  // info.duty      = 0x7fff;
+  // ioctl(fd, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&info));
+  // ioctl(fd, PWMIOC_START, 0);  
   //***  
 
   /* Initialize memory pools and message libs */
