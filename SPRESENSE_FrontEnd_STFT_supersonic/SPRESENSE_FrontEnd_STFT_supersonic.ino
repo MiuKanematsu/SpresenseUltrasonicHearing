@@ -106,7 +106,7 @@ void signal_process(int16_t* mono_input, int16_t* stereo_output, uint32_t sample
   arm_q15_to_float(&q15_mono[0], &pTmp[0], SAMPLE_SIZE);
   arm_rfft_fast_f32(&S, &pTmp[0], &p1[0], 0); 
   memset(&p2[0], 0, SAMPLE_SIZE*sizeof(float));
-  int shift = 261; // 192000/1024*200 (37500Hz)   40kHz->2.5kHz
+  int shift = 266; // 192000/1024*200 (37500Hz)   40kHz->2.5kHz
   memcpy(&p2[0], &p1[shift*2], (SAMPLE_SIZE/2-shift)*sizeof(float));
   arm_rfft_fast_f32(&S, &p2[0], &pTmp[0], 1); 
   arm_float_to_q15(&pTmp[0], &q15_mono[0], SAMPLE_SIZE);
