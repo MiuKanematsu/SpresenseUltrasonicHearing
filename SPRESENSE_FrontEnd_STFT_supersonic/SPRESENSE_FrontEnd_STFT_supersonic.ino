@@ -2,6 +2,8 @@
 #include <OutputMixer.h>
 #include <MemoryUtil.h>
 #include <arch/board/board.h>
+#include <audio/audio_common_defs.h>
+
 
 #define SAMPLE_SIZE (1024)
 
@@ -106,7 +108,8 @@ void signal_process(int16_t* mono_input, int16_t* stereo_output, uint32_t sample
   arm_q15_to_float(&q15_mono[0], &pTmp[0], SAMPLE_SIZE);
   arm_rfft_fast_f32(&S, &pTmp[0], &p1[0], 0); 
   memset(&p2[0], 0, SAMPLE_SIZE*sizeof(float));
-  int shift = 266; // 192000/1024*200 (37500Hz)   40kHz->2.5kHz
+  int shift = 200; // 192000/1024*200 (37500Hz)   40kHz->2.5kHz
+  // int shift = 266; // 192000/1024*200 (37500Hz)   40kHz->2.5kHz
   memcpy(&p2[0], &p1[shift*2], (SAMPLE_SIZE/2-shift)*sizeof(float));
   arm_rfft_fast_f32(&S, &p2[0], &pTmp[0], 1); 
   arm_float_to_q15(&pTmp[0], &q15_mono[0], SAMPLE_SIZE);
@@ -155,57 +158,47 @@ void mixer_stereo_output(uint8_t* stereo_output, uint32_t frame_size) {
 
 
 void setup() {
-  Serial.begin(115200);
-  //***
-  arm_rfft_fast_init_f32(&S, SAMPLE_SIZE);
+    Serial.begin(115200);
+    arm_rfft_fast_init_f32(&S, SAMPLE_SIZE);
 
-  // PWM 40kHz
-  // Serial.println("setup /dev/pwm0");
-  // fd = open("/dev/pwm0", O_RDONLY);
-  // info.frequency = 50000; // 40kHz
-  // info.duty      = 0x7fff;
-  // ioctl(fd, PWMIOC_SETCHARACTERISTICS, (unsigned long)((uintptr_t)&info));
-  // ioctl(fd, PWMIOC_START, 0);  
-  //***  
+    // Initialize memory pools and message libs
+    initMemoryPools();
+    createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
 
-  /* Initialize memory pools and message libs */
-  initMemoryPools();
-  createStaticPools(MEM_LAYOUT_RECORDINGPLAYER);
+    // setup FrontEnd and Mixer
+    theFrontEnd = FrontEnd::getInstance();
+    theMixer = OutputMixer::getInstance();
+    
+    // Set clock mode to high resolution
+    theFrontEnd->setCapturingClkMode(FRONTEND_CAPCLK_HIRESO); // 48000Hz
+    theMixer->setRenderingClkMode(OUTPUTMIXER_RNDCLK_HIRESO);
 
-  /* setup FrontEnd and Mixer */
-  theFrontEnd = FrontEnd::getInstance();
-  theMixer = OutputMixer::getInstance();
-  
-  /* set clock mode */
-  theFrontEnd->setCapturingClkMode(FRONTEND_CAPCLK_HIRESO);
-  theMixer->setRenderingClkMode(OUTPUTMIXER_RNDCLK_HIRESO);
+    // begin FrontEnd and OutputMixer
+    theFrontEnd->begin(frontend_attention_cb);
+    theMixer->begin();
+    Serial.println("Setup: FrontEnd and OutputMixer began");
 
-  /* begin FrontEnd and OuputMixer */
-  theFrontEnd->begin(frontend_attention_cb);
-  theMixer->begin();
-  Serial.println("Setup: FrontEnd and OutputMixer began");
+    // activate FrontEnd and Mixer
+    theFrontEnd->setMicGain(0);  // Adjust gain as needed
+    theFrontEnd->activate(frontend_done_cb);
+    theMixer->create(mixer_attention_cb);
+    theMixer->activate(OutputMixer0, outputmixer_done_cb);
+    delay(100); // waiting for Mic startup
+    Serial.println("Setup: FrontEnd and OutputMixer activated");
 
-  /* activate FrontEnd and Mixer */
-  theFrontEnd->setMicGain(0);
-  theFrontEnd->activate(frontend_done_cb);
-  theMixer->create(mixer_attention_cb);
-  theMixer->activate(OutputMixer0, outputmixer_done_cb);
-  delay(100); /* waiting for Mic startup */
-  Serial.println("Setup: FrontEnd and OutputMixer activated");
+    // Initialize FrontEnd
+    AsDataDest dst;
+    dst.cb = frontend_pcm_cb;
+    theFrontEnd->init(channel_num, bit_length, sample_size, AsDataPathCallback, dst);
+    Serial.println("Setup: FrontEnd initialized");
 
-  /* Initialize FrontEnd */
-  AsDataDest dst;
-  dst.cb = frontend_pcm_cb;
-  theFrontEnd->init(channel_num, bit_length, sample_size, AsDataPathCallback, dst);
-  Serial.println("Setup: FrontEnd initialized");
+    // Set rendering volume
+    theMixer->setVolume(-10, -10, -10); // -10dB
 
-  /* Set rendering volume */
-  theMixer->setVolume(-10, -10, -10); /* -10dB */
-
-  /* Unmute */
-  board_external_amp_mute_control(false);
-  theFrontEnd->start();
-  Serial.println("Setup: FrontEnd started");
+    // Unmute
+    board_external_amp_mute_control(false);
+    theFrontEnd->start();
+    Serial.println("Setup: FrontEnd started");
 }
 
 void loop() {
